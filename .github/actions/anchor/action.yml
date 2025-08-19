@@ -1,82 +1,82 @@
-name: 'Setup Anchor'
-description: 'Sets up an Anchor development environment.'
+name: 'Setup Anchor Development Environment'
+description: 'Sets up the solana sdk using the specified version'
 
 branding:
   icon: anchor
   color: blue
 
 inputs:
+  anchor-version:
+    description: 'The version of anchor to use.'
+    required: false
+    default: 'v0.29.0'
+  rust-version:
+    description: 'The version of rust to use.'
+    required: false
+    default: '1.80'
+  solana-key:
+    description: 'The private key to use for the solana sdk.'
+    required: false
   solana-cluster:
     description: 'The cluster to use for the solana sdk.'
     required: false
     default: 'devnet'
-  solana-key:
-    description: 'The private key to use for the solana sdk.'
-    required: false
-  rustc-version:
-    description: 'The version of rustc to use.'
-    default: 'v1.84.0'
-  node-version:
-    description: 'The version of node to use.'
-    default: 'v22.8.0'
-  solana-version:
-    description: 'The version of solana to use.'
-    default: 'v1.17.25'
-  anchor-version:
-    description: 'The version of anchor to use.'
-    default: 'v0.29.0'
+  run:
+    description: 'The command(s) to run.'
 
 runs:
   using: "composite"
   steps:
-    - name: Setup rustc
+    - name: Shell Setup
       run: |
-        rust_version=${{ inputs.rustc-version }}
-        rustup toolchain install ${rust_version#v}
-        rustup default ${rust_version#v}
-        rustup component add rustfmt clippy
-        echo "RUST_LOG=" >> $GITHUB_ENV
+        touch run
+        chmod +x run
+        echo "#!/bin/bash" >> run
+        echo "set -xeo pipefail" >> run
+        echo "export RUST_LOG=" >> run
       shell: bash
-    - name: Cache rust
-      uses: actions/cache@v4
-      continue-on-error: true
-      with:
-        path: |
-          ~/.cargo/bin/
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-          **/target/
-        key: rust-cache-${{ inputs.rustc-version }}-${{ github.job }}-${{ hashFiles('**/Cargo.toml') }}
-    - name: Setup node
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ inputs.node-version }}
-        cache: 'yarn'
-        registry-url: 'https://registry.npmjs.org'
-    - name: Install Solana CLI
+    - name: Install Dependencies
       run: |
-        wget -qO- "https://release.anza.xyz/${{ inputs.solana-version }}/solana-release-x86_64-unknown-linux-gnu.tar.bz2" | tar -xvj
-        echo "$PWD/solana-release/bin" >> $GITHUB_PATH
+        echo "yarn" >> run
       shell: bash
-    - name: Install Anchor CLI
+    - name: Update rustc
       run: |
-        anchor_version=${{ inputs.anchor-version }}
-        npm install -g @coral-xyz/anchor-cli@${anchor_version#v}
+        echo "rustup install ${{ inputs.rust-version }}" >> run
+        echo "rustup default ${{ inputs.rust-version }}" >> run
       shell: bash
-    - name: Configure Solana CLI
+    - name: Configure Solana
       run: |
-        solana config set --url ${{ inputs.solana-cluster }}
-        if [ -z "${{ inputs.solana-key }}" ]; then
-          solana-keygen new --no-bip39-passphrase
-        else
-          echo "${{ inputs.solana-key }}" > ~/.config/solana/id.json
-        fi
+        echo "solana config set --url ${{ inputs.solana-cluster }}" >> run
       shell: bash
-    - name: Log Installed Tools
+    - name: Configure Solana Key
+      if: ${{ !inputs.solana-key }}
       run: |
-        echo "rustc: $(rustc --version)"
-        echo "node: $(node --version)"
-        echo "solana: $(solana --version)"
-        echo "anchor: $(anchor --version)"
+        echo "solana-keygen new --no-bip39-passphrase" >> run
+      shell: bash
+    - name: Configure Solana Key
+      if: ${{ inputs.solana-key }}
+      run: |
+        echo "echo \"${{ inputs.solana-key }}\" > ~/.config/solana/id.json" >> run
+      shell: bash
+    - name: Airdrop Solana
+      if: ${{ inputs.solana-key && inputs.solana-cluster == 'devnet' }}
+      run: |
+        echo "solana airdrop 1 || true" >> run
+      shell: bash
+    - name: Run Commands
+      run: |
+        echo "${{ inputs.run }}" >> run
+      shell: bash
+    - name: Log Commands
+      run: |
+        echo "---"
+        cat run
+        echo "---"
+      shell: bash
+    - name: Run Docker
+      run: |
+        docker run \
+          --entrypoint '/workdir/run' \
+          -v "$(pwd)":/workdir \
+          backpackapp/build:${{ inputs.anchor-version }}
       shell: bash
