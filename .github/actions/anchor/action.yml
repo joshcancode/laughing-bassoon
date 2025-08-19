@@ -9,7 +9,7 @@ inputs:
   anchor-version:
     description: 'The version of anchor to use.'
     required: false
-    default: 'v0.29.0'
+    default: 'v0.31.1'
   rust-version:
     description: 'The version of rust to use.'
     required: false
